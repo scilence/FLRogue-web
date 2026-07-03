@@ -2,28 +2,72 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, viewport-fit=cover">
 		<title>OmniGame Hub - 2D Roguelike</title>
 		<style>
-html, body, #canvas {
+html, body {
 	margin: 0;
 	padding: 0;
 	border: 0;
+	width: 100%;
+	height: 100%;
 }
 
 body {
 	color: white;
-	background-color: black;
+	/* Letterbox side bars on desktop; also the base backdrop on mobile. */
+	background-color: #07070c;
 	overflow: hidden;
 	touch-action: none;
+	/* Center the phone frame horizontally when it is narrower than the window. */
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+/*
+ * #frame is the ONLY added DOM wrapper. It holds #canvas and the #status
+ * loading overlay so the splash/progress bar stay inside the phone frame.
+ *
+ * Base (mobile-first): full-viewport. Real phones / portrait touch devices
+ * stay full-screen exactly like the stock shell.
+ */
+#frame.phone-frame {
+	position: relative;
+	width: 100vw;
+	height: 100vh;   /* fallback for browsers without dvh */
+	height: 100dvh;  /* dynamic viewport height (mobile URL bar aware) */
+	background-color: #000;
+	overflow: hidden;
 }
 
 #canvas {
 	display: block;
+	width: 100%;
+	height: 100%;
 }
 
 #canvas:focus {
 	outline: none;
+}
+
+/*
+ * Desktop (mouse pointer + a window wider than a portrait phone): constrain
+ * the frame to the 720:1280 project aspect, full height, centered, with the
+ * dark body background showing through as letterbox side bars.
+ * min() guarantees the frame never overflows a narrow window.
+ * pointer:coarse real phones and windows narrower than 3:4 keep the base
+ * full-screen rules above.
+ */
+@media (pointer: fine) and (min-aspect-ratio: 3 / 4) {
+	#frame.phone-frame {
+		width: 100vw;
+		width: min(100vw, calc(100vh * 720 / 1280));
+		width: min(100vw, calc(100dvh * 720 / 1280));
+		height: 100vh;
+		height: 100dvh;
+		box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
+	}
 }
 
 #status, #status-splash, #status-progress {
@@ -95,25 +139,57 @@ body {
 
 	</head>
 	<body>
-		<canvas id="canvas">
-			Your browser does not support the canvas tag.
-		</canvas>
+		<div id="frame" class="phone-frame">
+			<canvas id="canvas">
+				Your browser does not support the canvas tag.
+			</canvas>
 
-		<noscript>
-			Your browser does not support JavaScript.
-		</noscript>
+			<noscript>
+				Your browser does not support JavaScript.
+			</noscript>
 
-		<div id="status">
-			<img id="status-splash" class="show-image--true fullsize--true use-filter--true" src="index.png" alt="">
-			<progress id="status-progress"></progress>
-			<div id="status-notice"></div>
+			<div id="status">
+				<img id="status-splash" class="show-image--true fullsize--true use-filter--true" src="index.png" alt="">
+				<progress id="status-progress"></progress>
+				<div id="status-notice"></div>
+			</div>
 		</div>
 
 		<script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":10024608,"index.wasm":35739700},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":0,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":10024608,"index.wasm":35739700},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
+
+// --- phone-frame resize manager -------------------------------------------
+// Web export uses canvas_resize_policy = 0 (None): the engine adopts whatever
+// canvas.width/height we set (its noResize branch does
+// `desired_size = [canvas.width, canvas.height]; _updateGL()`). We mirror the
+// #frame element's real pixel size (CSS box * devicePixelRatio) into the canvas
+// drawing buffer so the render aspect always matches the frame — portrait
+// letterbox on desktop, true device aspect (incl. non-16:9) on mobile. The
+// engine's stretch=canvas_items/expand adapts to that buffer. This is required
+// because canvas_resize_policy = 2 (Adaptive) would instead force the buffer to
+// window.innerWidth/innerHeight (full window), breaking the letterbox.
+(function () {
+	const frame = document.getElementById('frame');
+	const canvas = document.getElementById('canvas');
+	function resizeCanvasToFrame() {
+		const dpr = window.devicePixelRatio || 1;
+		const w = Math.max(1, Math.round(frame.clientWidth * dpr));
+		const h = Math.max(1, Math.round(frame.clientHeight * dpr));
+		if (canvas.width !== w) {
+			canvas.width = w;
+		}
+		if (canvas.height !== h) {
+			canvas.height = h;
+		}
+	}
+	resizeCanvasToFrame();
+	window.addEventListener('resize', resizeCanvasToFrame);
+	window.addEventListener('orientationchange', resizeCanvasToFrame);
+}());
+// --------------------------------------------------------------------------
 
 (function () {
 	const statusOverlay = document.getElementById('status');
